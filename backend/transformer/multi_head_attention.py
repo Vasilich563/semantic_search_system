@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from math import sqrt
 
 
 class MultiHeadAttention(nn.Module):
@@ -11,6 +12,7 @@ class MultiHeadAttention(nn.Module):
 
         self._d_head = d_model // num_heads
         self._num_heads = num_heads
+        self._sqrt_key_d_head = sqrt(self._d_head)
 
         self._w_query = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
         self._w_key = nn.Linear(d_model, d_model, bias=False, device=device, dtype=dtype)
@@ -26,7 +28,7 @@ class MultiHeadAttention(nn.Module):
 
 
     def dot_product_attention(self, query, key, value, dropout_p=0, mask=None):
-        scores = torch.matmul(query, key.transpose(-2, -1)) / self._sqrt_key_d
+        scores = torch.matmul(query, key.transpose(-2, -1)) / self._sqrt_key_d_head
         if mask is not None:
             scores += mask
 
@@ -90,13 +92,13 @@ class MultiHeadAttention(nn.Module):
 
 
     def forward(self, query_x, key_x, value_x, dropout_p=0, mask=None):
-        if mask is not None:
-            # Same mask applied to all h heads.
-            mask = mask.unsqueeze(-3)
+        # if mask is not None:
+        #     # Same mask applied to all h heads.
+        #     mask = mask.unsqueeze(-3)
 
-        if len(query_x.shape) == 3:
+        if len(query_x.shape) == 2:
             return self._no_batch_forward(query_x, key_x, value_x, dropout_p, mask)
-        elif len(query_x.shape) == 4:
+        elif len(query_x.shape) == 3:
             return self._batch_forward(query_x, key_x, value_x, dropout_p, mask)
 
 
