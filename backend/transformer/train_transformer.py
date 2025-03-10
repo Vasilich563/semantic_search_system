@@ -134,20 +134,33 @@ text = """Meshuggah is a Swedish extreme metal band formed in Umeå in 1987. Sin
     In 2006 and 2009, Meshuggah was nominated for two Swedish Grammis Awards for their albums Catch Thirtythree and obZen, respectively. In 2018, the band was nominated for a Grammy Award for their song "Clockworks" under the "Best Metal Performance" category.[2] The band has performed in various international festivals, including Ozzfest and Download, and embarked on the obZen world tour from 2008 to 2010, and also the "Ophidian Trek".
     """
 from pprint import pprint
-tokens = tokenizer(text, truncation=True, padding="max_length", max_length=100, stride=30, return_tensors='pt', return_overflowing_tokens=True)
+tokens = tokenizer(text, truncation=True, padding="max_length", max_length=8, stride=4, return_tensors='pt', return_overflowing_tokens=True)
 print(tokens.input_ids.shape)
 
 dataset = [
-    {"input_ids": tokens["input_ids"][i]} for i in range(tokens.input_ids.shape[0])
+    {"input_ids": tokens["input_ids"][i], "hugging_face_mask": tokens["attention_mask"][i]} for i in range(tokens.input_ids.shape[0])
 ]
 #pprint(dataset)
 #print(dataset)
 
+
+model = BidirectionalTransformer(len(tokenizer.get_vocab()), 8, 1, 32, 2, 14, 0, torch.device("cuda"), torch.float32, tokenizer.pad_token_type_id)
+from bidirectional_transformer import make_mask
 from torch.utils.data import DataLoader
 
 loader = DataLoader(dataset, batch_size=2, shuffle=False, collate_fn=mlm)
 for x in loader:
-   print(x)
+    #print(make_mask(x["hugging_face_mask"], torch.float32).shape)
+    model(
+        x["input_ids"].to(torch.device("cuda")),
+        hugging_face_mask=torch.tensor([
+            [1, 1, 1, 1, 1, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 1, 0]
+        ], requires_grad=False, device=torch.device("cuda"))
+    )
+    #model(x["input_ids"].to(torch.device("cuda")), hugging_face_mask=x["hugging_face_mask"])
+
+
 
 
 
