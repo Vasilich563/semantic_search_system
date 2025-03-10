@@ -10,7 +10,7 @@ class Encoder(nn.Module):
         self._blocks = nn.ModuleList()
         self._dropout_p = dropout_p
 
-        for _ in num_layers:
+        for _ in range(num_layers):
             self._blocks.append(
                 EncoderBlock(d_model, num_attention_heads, d_ffn_hidden, device, dtype)
             )
