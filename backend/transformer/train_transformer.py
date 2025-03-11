@@ -8,17 +8,14 @@ from bidirectional_transformer import BidirectionalTransformer
 from transformers import RobertaTokenizerFast, DataCollatorForLanguageModeling
 
 
-def make_dynamic_mask(batch, mask_coverage_percentage, percentage_of_masked_tokens, percentage_of_replaced_tokens):
-    # TODO new mask for batch on every epoch
-    pass
-
-
-
 def train_step(model, optimizer, loss_function, dataloader, batches_amount):
     running_loss = 0
-    for x_batch, y_batch in dataloader:
+    for data in dataloader:
+        x_batch = data["input_ids"]
+        mask_batch = data["hugging_face_mask"]
+        y_batch = data["labels"]
         optimizer.zero_grad(set_to_none=True)
-        sample_y = model(x_batch)  # TODO unpack x
+        sample_y = model(x_batch, hugging_face_mask=mask_batch)  # TODO unpack x
 
         batch, seq_len, vocab_size = sample_y.shape
         sample_y = sample_y.view(batch * seq_len, vocab_size)
@@ -36,14 +33,17 @@ def train_step(model, optimizer, loss_function, dataloader, batches_amount):
 
 def validation_step(model, loss_function, dataloader, batches_amount):
     running_loss = 0
-    for x_, y_ in dataloader:
-        sample_y = model(x_)  # TODO unpack x
+    for data in dataloader:
+        x_batch = data["input_ids"]
+        mask_batch = data["hugging_face_mask"]
+        y_batch = data["labels"]
+        sample_y = model(x_batch, hugging_face_mask=mask_batch)  # TODO unpack x
 
         batch, seq_len, vocab_size = sample_y.shape
         sample_y = sample_y.view(batch * seq_len, vocab_size)
-        y_ = y_.view(batch * seq_len)
+        y_batch = y_batch.view(batch * seq_len)
 
-        loss = loss_function(input=sample_y, target=y_)
+        loss = loss_function(input=sample_y, target=y_batch)
 
         running_loss += loss.detach().cpu().item()
 
@@ -122,63 +122,65 @@ def init_dataloaders(text, tokenizer, data_collator, max_length, stride, batch_s
     shuffle(dataset)
     train_dataset = dataset[:int(len(dataset) * train_part)]
     val_dataset = dataset[int(len(dataset) * train_part):]
+
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=data_collator)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, collate_fn=data_collator)
     return train_loader, val_loader
 
 
-tokenizer = RobertaTokenizerFast.from_pretrained("FacebookAI/roberta-large")
-mlm = DataCollatorForLanguageModeling(tokenizer, mlm_probability=0.15, return_tensors='pt')
-text = """Meshuggah is a Swedish extreme metal band formed in Umeå in 1987. Since 2004, the band's lineup consists of founding members Jens Kidman (lead vocals) and Fredrik Thordendal (lead guitar), alongside rhythm guitarist Mårten Hagström, drummer Tomas Haake and bassist Dick Lövgren. Since its formation, the band has released nine studio albums, six EPs and eight music videos. Their latest studio album, Immutable, was released in April 2022 via Atomic Fire Records.
-    Meshuggah has become known for their innovative musical style and their complex, polymetered song structures and polyrhythms. They rose to fame as a significant act in extreme underground music, became an influence for modern metal bands, and gained a cult following. The band was labelled as one of the ten most important hard rock and heavy metal bands by Rolling Stone and as the most important band in metal by Alternative Press. In the late 2000s, the band was an inspiration for the djent subgenre.
-    In 2006 and 2009, Meshuggah was nominated for two Swedish Grammis Awards for their albums Catch Thirtythree and obZen, respectively. In 2018, the band was nominated for a Grammy Award for their song "Clockworks" under the "Best Metal Performance" category.[2] The band has performed in various international festivals, including Ozzfest and Download, and embarked on the obZen world tour from 2008 to 2010, and also the "Ophidian Trek".
-    """
-from pprint import pprint
-tokens = tokenizer(text, truncation=True, padding="max_length", max_length=8, stride=4, return_tensors='pt', return_overflowing_tokens=True)
-print(tokens.input_ids.shape)
+if __name__ == "__main__":
+    tokenizer = RobertaTokenizerFast.from_pretrained("FacebookAI/roberta-large")
+    mlm = DataCollatorForLanguageModeling(tokenizer, mlm_probability=0.15, return_tensors='pt')
+    text = """Meshuggah is a Swedish extreme metal band formed in Umeå in 1987. Since 2004, the band's lineup consists of founding members Jens Kidman (lead vocals) and Fredrik Thordendal (lead guitar), alongside rhythm guitarist Mårten Hagström, drummer Tomas Haake and bassist Dick Lövgren. Since its formation, the band has released nine studio albums, six EPs and eight music videos. Their latest studio album, Immutable, was released in April 2022 via Atomic Fire Records.
+        Meshuggah has become known for their innovative musical style and their complex, polymetered song structures and polyrhythms. They rose to fame as a significant act in extreme underground music, became an influence for modern metal bands, and gained a cult following. The band was labelled as one of the ten most important hard rock and heavy metal bands by Rolling Stone and as the most important band in metal by Alternative Press. In the late 2000s, the band was an inspiration for the djent subgenre.
+        In 2006 and 2009, Meshuggah was nominated for two Swedish Grammis Awards for their albums Catch Thirtythree and obZen, respectively. In 2018, the band was nominated for a Grammy Award for their song "Clockworks" under the "Best Metal Performance" category.[2] The band has performed in various international festivals, including Ozzfest and Download, and embarked on the obZen world tour from 2008 to 2010, and also the "Ophidian Trek".
+        """
+    from pprint import pprint
+    tokens = tokenizer(text, truncation=True, padding="max_length", max_length=8, stride=4, return_tensors='pt', return_overflowing_tokens=True)
+    print(tokens.input_ids.shape)
 
-dataset = [
-    {"input_ids": tokens["input_ids"][i], "hugging_face_mask": tokens["attention_mask"][i]} for i in range(tokens.input_ids.shape[0])
-]
-#pprint(dataset)
-#print(dataset)
-
-
-model = BidirectionalTransformer(len(tokenizer.get_vocab()), 8, 1, 32, 2, 14, 0, torch.device("cuda"), torch.float32, tokenizer.pad_token_type_id)
-from bidirectional_transformer import make_mask
-from torch.utils.data import DataLoader
-
-loader = DataLoader(dataset, batch_size=2, shuffle=False, collate_fn=mlm)
-for x in loader:
-    #print(make_mask(x["hugging_face_mask"], torch.float32).shape)
-    model(
-        x["input_ids"].to(torch.device("cuda")),
-        hugging_face_mask=torch.tensor([
-            [1, 1, 1, 1, 1, 0, 0, 0],
-            [1, 1, 1, 1, 1, 1, 1, 0]
-        ], requires_grad=False, device=torch.device("cuda"))
-    )
-    #model(x["input_ids"].to(torch.device("cuda")), hugging_face_mask=x["hugging_face_mask"])
+    dataset = [
+        {"input_ids": tokens["input_ids"][i], "hugging_face_mask": tokens["attention_mask"][i]} for i in range(tokens.input_ids.shape[0])
+    ]
+    #pprint(dataset)
+    #print(dataset)
 
 
+    model = BidirectionalTransformer(len(tokenizer.get_vocab()), 8, 1, 32, 2, 14, 0, torch.device("cuda"), torch.float32, tokenizer.pad_token_type_id)
+    from bidirectional_transformer import make_mask
+    from torch.utils.data import DataLoader
 
+    loader = DataLoader(dataset, batch_size=2, shuffle=False, collate_fn=mlm)
+    for x in loader:
+        #print(make_mask(x["hugging_face_mask"], torch.float32).shape)
+        model(
+            x["input_ids"].to(torch.device("cuda")),
+            hugging_face_mask=torch.tensor([
+                [1, 1, 1, 1, 1, 0, 0, 0],
+                [1, 1, 1, 1, 1, 1, 1, 0]
+            ], requires_grad=False, device=torch.device("cuda"))
+        )
+        #model(x["input_ids"].to(torch.device("cuda")), hugging_face_mask=x["hugging_face_mask"])
 
 
 
 
-#dataset = []
-# for text in texts:
-#     text_tokens =
-#     dataset.append(
-#
-#     )
-# print(dataset[-1]["attention_mask"])
 
 
-# a, b = mlm.torch_mask_tokens(tokens)
-# print(a)
-# print("#" * 100)
-# print(b)
+
+    #dataset = []
+    # for text in texts:
+    #     text_tokens =
+    #     dataset.append(
+    #
+    #     )
+    # print(dataset[-1]["attention_mask"])
+
+
+    # a, b = mlm.torch_mask_tokens(tokens)
+    # print(a)
+    # print("#" * 100)
+    # print(b)
 
 
 
