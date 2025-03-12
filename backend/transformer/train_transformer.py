@@ -8,7 +8,7 @@ from bidirectional_transformer import BidirectionalTransformer
 from transformers import RobertaTokenizerFast, DataCollatorForLanguageModeling
 
 
-def train_step(model, optimizer, loss_function, dataloader, batches_amount):
+def train_step(model, optimizer, schedule, loss_function, dataloader, batches_amount):
     running_loss = 0
     for data in dataloader:
         x_batch = data["input_ids"]
@@ -24,6 +24,7 @@ def train_step(model, optimizer, loss_function, dataloader, batches_amount):
         loss = loss_function(input=sample_y, target=y_batch)
         loss.backward()
         optimizer.step()
+        # TODO schedule.step()
 
         running_loss += loss.detach().cpu().item()
 
