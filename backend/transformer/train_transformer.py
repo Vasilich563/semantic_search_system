@@ -15,7 +15,7 @@ def train_step(model, optimizer, schedule, loss_function, dataloader, batches_am
         mask_batch = data["hugging_face_mask"]
         y_batch = data["labels"]
         optimizer.zero_grad(set_to_none=True)
-        sample_y = model(x_batch, hugging_face_mask=mask_batch)  # TODO unpack x
+        sample_y = model.train_forward(x_batch, hugging_face_mask=mask_batch)  # TODO unpack x
 
         batch, seq_len, vocab_size = sample_y.shape
         sample_y = sample_y.view(batch * seq_len, vocab_size)
@@ -24,7 +24,7 @@ def train_step(model, optimizer, schedule, loss_function, dataloader, batches_am
         loss = loss_function(input=sample_y, target=y_batch)
         loss.backward()
         optimizer.step()
-        # TODO schedule.step()
+        schedule.step()
 
         running_loss += loss.detach().cpu().item()
 
@@ -38,7 +38,7 @@ def validation_step(model, loss_function, dataloader, batches_amount):
         x_batch = data["input_ids"]
         mask_batch = data["hugging_face_mask"]
         y_batch = data["labels"]
-        sample_y = model(x_batch, hugging_face_mask=mask_batch)  # TODO unpack x
+        sample_y = model.train_forward(x_batch, hugging_face_mask=mask_batch)  # TODO unpack x
 
         batch, seq_len, vocab_size = sample_y.shape
         sample_y = sample_y.view(batch * seq_len, vocab_size)
@@ -69,7 +69,7 @@ def save_model_daemon(model, path_to_save_models, epoch):
 
 
 def train(
-    model: torch.nn.Module, optimizer: torch.optim.Optimizer, loss_function,
+    model: torch.nn.Module, optimizer: torch.optim.Optimizer, schedule, loss_function,
     train_dataloader: torch.utils.data.DataLoader, val_dataloader: torch.utils.data.DataLoader,
     epochs_amount, save_period, path_to_save_models
 ):
@@ -79,21 +79,23 @@ def train(
     val_losses = []
     train_batches_amount = get_batches_amount(len(train_dataloader.dataset), train_dataloader.batch_size)
     val_batches_amount = get_batches_amount(len(val_dataloader.dataset), val_dataloader.batch_size)
+    model.train()
     for epoch in range(1, epochs_amount + 1):
         if epoch % save_period == 0:
             print(f"Epoch {epoch}/{epochs_amount}")
             epoch_start = datetime.now()
 
-        model.train()
-        train_running_loss = train_step(model, optimizer, loss_function, train_dataloader, train_batches_amount)
 
-        with torch.no_grad():
-            model.eval()
-            val_running_loss = validation_step(model, loss_function, val_dataloader, val_batches_amount)
+        train_running_loss = train_step(model, optimizer, schedule, loss_function, train_dataloader, train_batches_amount)
 
-        train_losses.append(train_running_loss)
-        val_losses.append(val_running_loss)
         if epoch % save_period == 0:
+            with torch.no_grad():
+                model.eval()
+                val_running_loss = validation_step(model, loss_function, val_dataloader, val_batches_amount)
+
+            train_losses.append(train_running_loss)
+            val_losses.append(val_running_loss)
+
             print(f"\tEpoch is ended in {datetime.now() - epoch_start}\n\tTrain loss:\t{train_running_loss}\n\tValidation loss: {val_running_loss}")
             save_model_daemon(model, path_to_save_models, epoch)
 
@@ -102,14 +104,19 @@ def train(
     return train_losses, val_losses
 
 
-def save_losses(train_losses, validation_losses, filename):
+def save_losses(train_losses, validation_losses, filename, save_period):
     with open(filename, 'w') as fout:
         writer = csv.DictWriter(fout, ["Эпоха", "Ошибка обучения", "Ошибка валидации"])
         writer.writeheader()
         for i in range(len(train_losses)):
-            writer.writerow(
-                {"Эпоха": i + 1, "Ошибка обучения": train_losses[i], "Ошибка валидации": validation_losses[i]}
-            )
+            if i % save_period == 0:
+                writer.writerow(
+                    {"Эпоха": i + 1, "Ошибка обучения": train_losses[i], "Ошибка валидации": validation_losses[i]}
+                )
+            else:
+                writer.writerow(
+                    {"Эпоха": i + 1, "Ошибка обучения": train_losses[i], "Ошибка валидации": "chep"}
+                )
 
 
 def init_dataloaders(text, tokenizer, data_collator, max_length, stride, batch_size, train_part):
@@ -127,6 +134,10 @@ def init_dataloaders(text, tokenizer, data_collator, max_length, stride, batch_s
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=data_collator)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, collate_fn=data_collator)
     return train_loader, val_loader
+
+
+def make_dataset():
+    pass
 
 
 if __name__ == "__main__":
@@ -162,7 +173,6 @@ if __name__ == "__main__":
             ], requires_grad=False, device=torch.device("cuda"))
         )
         #model(x["input_ids"].to(torch.device("cuda")), hugging_face_mask=x["hugging_face_mask"])
-
 
 
 

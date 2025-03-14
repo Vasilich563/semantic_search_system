@@ -7,21 +7,22 @@ from backend.embedding_system.snippet_bounds import SnippetBounds
 class EmbeddingSystem:
 
     def __init__(self, tokenizer: RobertaTokenizerFast, embedding_model: BidirectionalTransformer):
-        self._tokenizer = tokenizer
-        self._embedding_model = embedding_model
+        self._tokenizer: RobertaTokenizerFast = tokenizer
+        self._embedding_model: BidirectionalTransformer = embedding_model
+        self._embedding_model.eval()
 
         self._level_1_max_len = 16
         self._level_1_stride = 8
 
         self._level_2_max_len = 64
-        self._level2_stride = 32
+        self._level_2_stride = 32
 
-        self._level3_max_len = 256
-        self._level3_stride = 128
+        self._level_3_max_len = 256
+        self._level_3_stride = 128
 
 
     @staticmethod
-    def _get_window_start_end_mapping(offset_mapping):
+    def _get_snippet_bounds(offset_mapping):
         snippet_bounds = []
         for i in range(offset_mapping.shape[0]):
             # offset_mappin[i][j] is array of len(2)
@@ -38,14 +39,54 @@ class EmbeddingSystem:
         return snippet_bounds
 
 
-
-    def _tokenize_text(self, text, max_len, stride, find_snippet_bounds):
-        if find_snippet_bounds:
-            tokenized_text = self._tokenizer(
-
-            )
+    def _tokenize_text(self, text, max_len, stride, return_snippet_bounds):
+        tokenized_text = self._tokenizer(
+            text, padding="max_length", truncation=True, max_length=max_len, stride=stride,
+            return_overflowing_tokens=True, return_tensors="pt", return_offsets_mapping=return_snippet_bounds
+        )
+        if return_snippet_bounds:
+            snippet_bounds = self._get_snippet_bounds(tokenized_text["offset_mapping"])
+            return tokenized_text["input_ids"], tokenized_text["attention_mask"], snippet_bounds
         else:
-            pass
+            return tokenized_text["input_ids"], tokenized_text["attention_mask"]
+
+
+    def _count_text_embeddings(self, text_input_ids, text_attention_mask, mean_along_batch):
+        with torch.no_grad():
+            text_input_ids = text_input_ids.to(self._embedding_model.device)
+            text_attention_mask = text_attention_mask.to(self._embedding_model.device)
+            text_embedding_batch = self._embedding_model.forward(text_input_ids, text_attention_mask)
+
+            if mean_along_batch:
+                return [text_embedding_batch.mean(dim=0).detach().cpu().tolist()]
+            else:
+                return text_embedding_batch.detach().cpu().tolist()
+
+
+    @staticmethod
+    def _windows_before_next_level(next_level_max_len, cur_level_max_len, cur_level_stride):
+        return ((next_level_max_len - cur_level_max_len) // cur_level_stride) + 1
+
+
+    def index_new_text(self, text, text_path):
+        text_input_ids, text_attention_mask, snippet_bounds = self._tokenize_text(
+            text, self._level_1_max_len, self._level_1_stride, return_snippet_bounds=True
+        )
+        text_embeddings = self._count_text_embeddings(text_input_ids, text_attention_mask, mean_along_batch=False)
+        # TODO save
+
+        text_input_ids, text_attention_mask, snippet_bounds = self._tokenize_text(
+            text, self._level_2_max_len, self._level_2_stride, return_snippet_bounds=True
+        )
+        text_embeddings = self._count_text_embeddings(text_input_ids, text_attention_mask, mean_along_batch=False)
+        # TODO save
+
+        text_input_ids, text_attention_mask, snippet_bounds = self._tokenize_text(
+            text, self._level_3_max_len, self._level_3_stride, return_snippet_bounds=True
+        )
+        text_embeddings = self._count_text_embeddings(text_input_ids, text_attention_mask, mean_along_batch=False)
+        # TODO save
+
 
 
 
