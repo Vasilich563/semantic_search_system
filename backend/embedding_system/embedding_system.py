@@ -40,15 +40,16 @@ class EmbeddingSystem:
 
 
     def _tokenize_text(self, text, max_len, stride, return_snippet_bounds):
-        tokenized_text = self._tokenizer(
-            text, padding="max_length", truncation=True, max_length=max_len, stride=stride,
-            return_overflowing_tokens=True, return_tensors="pt", return_offsets_mapping=return_snippet_bounds
-        )
-        if return_snippet_bounds:
-            snippet_bounds = self._get_snippet_bounds(tokenized_text["offset_mapping"])
-            return tokenized_text["input_ids"], tokenized_text["attention_mask"], snippet_bounds
-        else:
-            return tokenized_text["input_ids"], tokenized_text["attention_mask"]
+        with torch.no_grad():
+            tokenized_text = self._tokenizer(
+                text, padding="max_length", truncation=True, max_length=max_len, stride=stride,
+                return_overflowing_tokens=True, return_tensors="pt", return_offsets_mapping=return_snippet_bounds
+            )
+            if return_snippet_bounds:
+                snippet_bounds = self._get_snippet_bounds(tokenized_text["offset_mapping"])
+                return tokenized_text["input_ids"], tokenized_text["attention_mask"], snippet_bounds
+            else:
+                return tokenized_text["input_ids"], tokenized_text["attention_mask"]
 
 
     def _count_text_embeddings(self, text_input_ids, text_attention_mask, mean_along_batch):
@@ -68,6 +69,7 @@ class EmbeddingSystem:
         return ((next_level_max_len - cur_level_max_len) // cur_level_stride) + 1
 
 
+    # TODO async?
     def index_new_text(self, text, text_path):
         text_input_ids, text_attention_mask, snippet_bounds = self._tokenize_text(
             text, self._level_1_max_len, self._level_1_stride, return_snippet_bounds=True
@@ -86,6 +88,25 @@ class EmbeddingSystem:
         )
         text_embeddings = self._count_text_embeddings(text_input_ids, text_attention_mask, mean_along_batch=False)
         # TODO save
+
+
+    # TODO async?
+    def handle_user_query(self, query, limit=25):
+        input_ids, attention_mask = self._tokenize_text(
+            query, self._level_1_max_len, self._level_1_stride, return_snippet_bounds=False
+        )
+        if input_ids.shape[0] > self._windows_before_next_level(self._level_2_max_len, self._level_1_max_len, self._level_1_stride):
+            input_ids, attention_mask = self._tokenize_text(
+                query, self._level_2_max_len, self._level_2_stride, return_snippet_bounds=False
+            )
+            if input_ids.shape[0] > self._windows_before_next_level(self._level_3_max_len, self._level_2_max_len, self._level_2_stride):
+                input_ids, attention_mask = self._tokenize_text(
+                    query, self._level_3_max_len, self._level_3_stride, return_snippet_bounds=False
+                )
+        # TODO db call
+
+
+
 
 
 

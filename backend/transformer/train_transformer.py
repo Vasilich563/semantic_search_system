@@ -4,6 +4,8 @@ from threading import Thread
 from random import shuffle
 import torch
 from torch.utils.data import DataLoader
+
+from backend.define_torch_device import define_device
 from bidirectional_transformer import BidirectionalTransformer
 from transformers import RobertaTokenizerFast, DataCollatorForLanguageModeling
 
@@ -143,6 +145,11 @@ def make_dataset():
 if __name__ == "__main__":
     tokenizer = RobertaTokenizerFast.from_pretrained("FacebookAI/roberta-large")
     mlm = DataCollatorForLanguageModeling(tokenizer, mlm_probability=0.15, return_tensors='pt')
+
+    device = define_device()
+    dtype = torch.float32
+    
+
     text = """Meshuggah is a Swedish extreme metal band formed in Umeå in 1987. Since 2004, the band's lineup consists of founding members Jens Kidman (lead vocals) and Fredrik Thordendal (lead guitar), alongside rhythm guitarist Mårten Hagström, drummer Tomas Haake and bassist Dick Lövgren. Since its formation, the band has released nine studio albums, six EPs and eight music videos. Their latest studio album, Immutable, was released in April 2022 via Atomic Fire Records.
         Meshuggah has become known for their innovative musical style and their complex, polymetered song structures and polyrhythms. They rose to fame as a significant act in extreme underground music, became an influence for modern metal bands, and gained a cult following. The band was labelled as one of the ten most important hard rock and heavy metal bands by Rolling Stone and as the most important band in metal by Alternative Press. In the late 2000s, the band was an inspiration for the djent subgenre.
         In 2006 and 2009, Meshuggah was nominated for two Swedish Grammis Awards for their albums Catch Thirtythree and obZen, respectively. In 2018, the band was nominated for a Grammy Award for their song "Clockworks" under the "Best Metal Performance" category.[2] The band has performed in various international festivals, including Ozzfest and Download, and embarked on the obZen world tour from 2008 to 2010, and also the "Ophidian Trek".
