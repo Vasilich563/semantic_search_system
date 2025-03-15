@@ -1,1 +1,3 @@
 transformers
+sqlalchemy[async]
+psycopg2-binary
