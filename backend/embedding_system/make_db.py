@@ -9,6 +9,7 @@ def actions_on_snippet_level(level):
             CREATE TABLE IF NOT EXISTS triple_s.snippet_level{level}(
                 snippet_name TEXT PRIMARY KEY,
                 document_path TEXT NOT NULL,
+                document_name TEXT NOT NULL,
                 snippet TEXT NOT NULL,
                 embedding vector(:dim)
             );
@@ -18,8 +19,8 @@ def actions_on_snippet_level(level):
     connection.execute(
         text(f"""
             CREATE INDEX IF NOT EXISTS
-                snippet_level{level}_document_path_hash_index 
-                ON triple_s.snippet_level{level} USING HASH (document_path);
+                snippet_level{level}_document_name_hash_index 
+                ON triple_s.snippet_level{level} USING HASH (document_name);
         """)
     )
 
