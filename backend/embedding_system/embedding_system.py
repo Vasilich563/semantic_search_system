@@ -1,8 +1,11 @@
+from typing import List
+import pathlib
 import torch
 from transformers import RobertaTokenizerFast
 from backend.transformer.bidirectional_transformer import BidirectionalTransformer
 from backend.embedding_system.snippet_bounds import SnippetBounds
 from backend.embedding_system.db_crud import DBCrud
+
 
 
 class EmbeddingSystem:
@@ -71,24 +74,42 @@ class EmbeddingSystem:
     def _windows_before_next_level(next_level_max_len, cur_level_max_len, cur_level_stride):
         return ((next_level_max_len - cur_level_max_len) // cur_level_stride) + 1
 
+    @staticmethod
+    def _prepare_rows_for_db(document_text, document_path, snippet_bounds: List[SnippetBounds], embeddings_batch):
+        list_of_rows = []
+        document_name =  pathlib.Path(document_path).stem  # filename without extension
+        for i in range(len(embeddings_batch)):
+            snippet_name = document_path + str(i)
+            list_of_rows.append({
+                "snippet_name": snippet_name,
+                "document_path": document_path,
+                "document_name": document_name,
+                "snippet": document_text[snippet_bounds[i].snippet_start_index: snippet_bounds[i].snippet_end_index],
+                "embedding": embeddings_batch[i]
+            })
+            return list_of_rows
 
-    async def index_new_text(self, text, text_path):
+
+    async def index_new_text(self, document_text, document_path):
         text_input_ids, text_attention_mask, snippet_bounds = self._tokenize_text(
-            text, self._level_1_max_len, self._level_1_stride, return_snippet_bounds=True
+            document_text, self._level_1_max_len, self._level_1_stride, return_snippet_bounds=True
         )
         text_embeddings = self._count_text_embeddings(text_input_ids, text_attention_mask, mean_along_batch=False)
+        list_of_rows_for_db = self._prepare_rows_for_db(document_text, document_path, snippet_bounds, text_embeddings)
         # TODO save
 
         text_input_ids, text_attention_mask, snippet_bounds = self._tokenize_text(
-            text, self._level_2_max_len, self._level_2_stride, return_snippet_bounds=True
+            document_text, self._level_2_max_len, self._level_2_stride, return_snippet_bounds=True
         )
         text_embeddings = self._count_text_embeddings(text_input_ids, text_attention_mask, mean_along_batch=False)
+        list_of_rows_for_db = self._prepare_rows_for_db(document_text, document_path, snippet_bounds, text_embeddings)
         # TODO save
 
         text_input_ids, text_attention_mask, snippet_bounds = self._tokenize_text(
-            text, self._level_3_max_len, self._level_3_stride, return_snippet_bounds=True
+            document_text, self._level_3_max_len, self._level_3_stride, return_snippet_bounds=True
         )
         text_embeddings = self._count_text_embeddings(text_input_ids, text_attention_mask, mean_along_batch=False)
+        list_of_rows_for_db = self._prepare_rows_for_db(document_text, document_path, snippet_bounds, text_embeddings)
         # TODO save
 
 
@@ -123,7 +144,7 @@ class EmbeddingSystem:
 
 
     async def get_text_by_name(self, document_name):
-
+        pass
 
 
 
