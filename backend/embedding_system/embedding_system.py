@@ -1,15 +1,18 @@
-from typing import List
 import torch
 from transformers import RobertaTokenizerFast
 from backend.transformer.bidirectional_transformer import BidirectionalTransformer
 from backend.embedding_system.snippet_bounds import SnippetBounds
+from backend.embedding_system.db_crud import DBCrud
+
 
 class EmbeddingSystem:
 
-    def __init__(self, tokenizer: RobertaTokenizerFast, embedding_model: BidirectionalTransformer):
+    def __init__(self, tokenizer: RobertaTokenizerFast, embedding_model: BidirectionalTransformer, db_crud: DBCrud):
         self._tokenizer: RobertaTokenizerFast = tokenizer
         self._embedding_model: BidirectionalTransformer = embedding_model
         self._embedding_model.eval()
+
+        self._db_crud = db_crud
 
         self._level_1_max_len = 16
         self._level_1_stride = 8
@@ -69,8 +72,7 @@ class EmbeddingSystem:
         return ((next_level_max_len - cur_level_max_len) // cur_level_stride) + 1
 
 
-    # TODO async?
-    def index_new_text(self, text, text_path):
+    async def index_new_text(self, text, text_path):
         text_input_ids, text_attention_mask, snippet_bounds = self._tokenize_text(
             text, self._level_1_max_len, self._level_1_stride, return_snippet_bounds=True
         )
@@ -90,8 +92,7 @@ class EmbeddingSystem:
         # TODO save
 
 
-    # TODO async?
-    def handle_user_query(self, query, limit=25):
+    async def handle_user_query(self, query, limit=25):
         input_ids, attention_mask = self._tokenize_text(
             query, self._level_1_max_len, self._level_1_stride, return_snippet_bounds=False
         )
@@ -103,7 +104,27 @@ class EmbeddingSystem:
                 input_ids, attention_mask = self._tokenize_text(
                     query, self._level_3_max_len, self._level_3_stride, return_snippet_bounds=False
                 )
-        # TODO db call
+        # TODO query
+
+
+    async def remove_document(self, document_path):
+        # TODO remove
+        pass
+
+
+    async def update_document(self, document_path, new_text):
+        # TODO delete old
+        # TODO write new
+        pass
+
+
+    async def change_document_path(self, old_document_path, new_document_path):
+        pass
+
+
+    async def get_text_by_name(self, document_name):
+
+
 
 
 
